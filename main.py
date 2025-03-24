@@ -142,5 +142,16 @@ if uploaded_file is not None:
             st.error(f"Erro durante a consulta: {e}")
             st.stop()  # Para a execução se houver erro na consulta
 
-        st.dataframe(resultados)  # Exibir resultados como DataFrame
-        st.success("Consulta finalizada!")
+        st.dataframe(pd.DataFrame(resultados))  # Exibir resultados como DataFrame
+
+        # Salvar resultados em CSV na pasta especificada
+        df_resultados = pd.DataFrame(resultados)
+        pasta_destino = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
+        nome_arquivo = "cnpjsconsultados.csv"
+        caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+
+        try:
+            df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8')
+            st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
+        except Exception as e:
+            st.error(f"Erro ao salvar o arquivo CSV: {e}")
