@@ -119,7 +119,7 @@ if uploaded_file is not None:
         try:
             # Itera sobre as linhas do DataFrame
             for index, row in df_excel.iterrows():
-                cnpj = row['CNPJ']
+                cnpj = str(row['CNPJ'])  # Garante que CNPJ seja string
                 cnpj_limpo = limpar_cnpj(cnpj)
 
                 if verificar_cnpj_consultado(cnpj_limpo):
