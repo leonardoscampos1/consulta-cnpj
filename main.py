@@ -17,7 +17,7 @@ logging.basicConfig(
 # Chave da API
 API_KEY = '953c550f-fa61-461a-98d4-16671d4a4360-835686e9-0df7-4b35-a353-749dc2b19d7f'
 
-# Função para consultar o CNPJ (sem alterações)
+# Função para consultar o CNPJ
 def consultar_cnpj(cnpj):
     url = f'https://api.cnpja.com/office/{cnpj}?registrations=BR'
     headers = {'Authorization': API_KEY}
@@ -33,54 +33,72 @@ def consultar_cnpj(cnpj):
         logging.error(f"Erro ao tentar consultar o CNPJ {cnpj}: {e}")
         return None
 
-# Função para extrair os dados para o formato de dicionário (sem alterações)
+# Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
-    # ... (seu código de extração de dados)
-    dados = {
-        'CNPJ': dados_cnpj['taxId'],
-        'Nome': dados_cnpj['company']['name'],
-        'Nome Fantasia': dados_cnpj.get('alias', 'Não disponível'),
-        'Capital Social': dados_cnpj['company']['equity'],
-        'Natureza Jurídica': dados_cnpj['company']['nature']['text'],
-        'Tamanho': dados_cnpj['company']['size']['text'],
-        'Data de Fundação': dados_cnpj['founded'],
-        'Status': dados_cnpj['status']['text'],
-        'Data de Status': dados_cnpj['statusDate'],
-        'Razão de Status': dados_cnpj.get('reason', {}).get('text', 'Não disponível'),
-        'Endereço': f"{dados_cnpj['address']['street']}, {dados_cnpj['address']['number']}, {dados_cnpj['address']['details']}, {dados_cnpj['address']['district']}, {dados_cnpj['address']['city']}/{dados_cnpj['address']['state']}, {dados_cnpj['address']['zip']}",
-        'País': dados_cnpj['address']['country']['name'],
-        'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
-        'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
-        'Atividade Principal': dados_cnpj['mainActivity']['text'],
-        'Atividades Secundárias': ', '.join([activity['text'] for activity in dados_cnpj['sideActivities']]) if dados_cnpj['sideActivities'] else 'Nenhuma',
-    }
+    try:
+        dados = {
+            'CNPJ': dados_cnpj['taxId'],
+            'Nome': dados_cnpj['company']['name'],
+            'Nome Fantasia': dados_cnpj.get('alias', 'Não disponível'),
+            'Capital Social': dados_cnpj['company']['equity'],
+            'Natureza Jurídica': dados_cnpj['company']['nature']['text'],
+            'Tamanho': dados_cnpj['company']['size']['text'],
+            'Data de Fundação': dados_cnpj['founded'],
+            'Status': dados_cnpj['status']['text'],
+            'Data de Status': dados_cnpj['statusDate'],
+            'Razão de Status': dados_cnpj.get('reason', {}).get('text', 'Não disponível'),
+            'Endereço': f"{dados_cnpj['address']['street']}, {dados_cnpj['address']['number']}, {dados_cnpj['address']['details']}, {dados_cnpj['address']['district']}, {dados_cnpj['address']['city']}/{dados_cnpj['address']['state']}, {dados_cnpj['address']['zip']}",
+            'País': dados_cnpj['address']['country']['name'],
+            'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
+            'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
+            'Atividade Principal': dados_cnpj['mainActivity']['text'],
+            'Atividades Secundárias': ', '.join([activity['text'] for activity in dados_cnpj['sideActivities']]) if dados_cnpj['sideActivities'] else 'Nenhuma',
+        }
 
-    # Inscrição Estadual
-    if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
-        inscricao_estadual = dados_cnpj['registrations'][0]
-        dados['Inscrição Estadual Estado'] = inscricao_estadual['state']
-        dados['Inscrição Estadual Número'] = inscricao_estadual['number']
-        dados['Inscrição Estadual Status'] = inscricao_estadual['status']['text']
-        dados['Inscrição Estadual Tipo'] = inscricao_estadual['type']['text']
-        dados['Inscrição Estadual Data de Status'] = inscricao_estadual['statusDate']
-    else:
-        dados['Inscrição Estadual Estado'] = 'Não encontrada'
-        dados['Inscrição Estadual Número'] = 'Não encontrada'
-        dados['Inscrição Estadual Status'] = 'Não encontrada'
-        dados['Inscrição Estadual Tipo'] = 'Não encontrada'
-        dados['Inscrição Estadual Data de Status'] = 'Não encontrada'
+        # Inscrição Estadual
+        if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
+            inscricao_estadual = dados_cnpj['registrations'][0]
+            dados['Inscrição Estadual Estado'] = inscricao_estadual['state']
+            dados['Inscrição Estadual Número'] = inscricao_estadual['number']
+            dados['Inscrição Estadual Status'] = inscricao_estadual['status']['text']
+            dados['Inscrição Estadual Tipo'] = inscricao_estadual['type']['text']
+            dados['Inscrição Estadual Data de Status'] = inscricao_estadual['statusDate']
+        else:
+            dados['Inscrição Estadual Estado'] = 'Não encontrada'
+            dados['Inscrição Estadual Número'] = 'Não encontrada'
+            dados['Inscrição Estadual Status'] = 'Não encontrada'
+            dados['Inscrição Estadual Tipo'] = 'Não encontrada'
+            dados['Inscrição Estadual Data de Status'] = 'Não encontrada'
 
-    return dados
+        # Adicionando informações do Simples Nacional e SIMEI
+        if 'simples' in dados_cnpj['company']:
+            dados['Optante Simples Nacional'] = dados_cnpj['company']['simples']['optant']
+            dados['Data Opção Simples Nacional'] = dados_cnpj['company']['simples']['since']
+        else:
+            dados['Optante Simples Nacional'] = 'Não disponível'
+            dados['Data Opção Simples Nacional'] = 'Não disponível'
 
-# Função para limpar os CNPJs (sem alterações)
+        if 'simei' in dados_cnpj['company']:
+            dados['Optante SIMEI'] = dados_cnpj['company']['simei']['optant']
+            dados['Data Opção SIMEI'] = dados_cnpj['company']['simei']['since']
+        else:
+            dados['Optante SIMEI'] = 'Não disponível'
+            dados['Data Opção SIMEI'] = 'Não disponível'
+
+        return dados
+    except Exception as e:
+        logging.error(f"Erro ao extrair dados: {e}")
+        return {}  # Retorna um dicionário vazio em caso de erro
+
+# Função para limpar os CNPJs
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
 
 # Função para verificar se o CNPJ já foi consultado
 def verificar_cnpj_consultado(cnpj_limpo):
     arquivos_resultados = [
-        r"G:\Meu Drive\BEES\consultas_cnpj_resultados2.csv",
-        r"G:\Meu Drive\BEES\consultas_cnpj_resultados.csv",
+        r"G:\Drives compartilhados\Cadastro BEES\CNPJ\consultas_cnpj_resultados2.csv",
+        r"G:\Drives compartilhados\Cadastro BEES\CNPJ\consultas_cnpj_resultados.csv",
     ]
     for arquivo in arquivos_resultados:
         if os.path.exists(arquivo):
@@ -105,40 +123,45 @@ uploaded_file = st.file_uploader("Carregue o arquivo XLSX com os CNPJs", type="x
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
-        resultados = []  # Lista para armazenar os resultados
+        resultados = []
 
-        progress_bar = st.progress(0)  # Barra de progresso
+        progress_bar = st.progress(0)
 
         try:
             df_excel = pd.read_excel(uploaded_file)
-            total_rows = len(df_excel)  # Obtém o total de linhas do DataFrame
+            total_rows = len(df_excel)
         except Exception as e:
             st.error(f"Erro ao ler o arquivo XLSX: {e}")
-            st.stop()  # Para a execução se houver erro na leitura
+            st.stop()
 
         total_processed = 0
-        try:
-            # Itera sobre as linhas do DataFrame
-            for index, row in df_excel.iterrows():
-                cnpj = row['CNPJ']
-                cnpj_limpo = limpar_cnpj(cnpj)
+        for index, row in df_excel.iterrows():
+            cnpj = row['CNPJ']
+            cnpj_limpo = limpar_cnpj(cnpj)
 
-                if verificar_cnpj_consultado(cnpj_limpo):
-                    logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
-                    continue
+            if verificar_cnpj_consultado(cnpj_limpo):
+                logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
+                continue
 
-                logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
-                dados_cnpj = consultar_cnpj(cnpj_limpo)
-                if dados_cnpj:
-                    dados_empresa = extrair_dados_para_df(dados_cnpj)
+            logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
+            dados_cnpj = consultar_cnpj(cnpj_limpo)
+            if dados_cnpj:
+                dados_empresa = extrair_dados_para_df(dados_cnpj)
+                if dados_empresa:  # Verifica se dados_empresa não está vazio
                     resultados.append(dados_empresa)
 
-                total_processed += 1
-                progress_bar.progress(total_processed / total_rows)
+            total_processed += 1
+            progress_bar.progress(total_processed / total_rows)
 
-        except Exception as e:
-            st.error(f"Erro durante a consulta: {e}")
-            st.stop()  # Para a execução se houver erro na consulta
+        st.dataframe(resultados)
 
-        st.dataframe(resultados)  # Exibir resultados como DataFrame
+        # Adicionando informações gerais sobre o Simples Nacional
+        st.subheader("Informações Gerais sobre o Simples Nacional")
+        st.write(
+            """
+            O Simples Nacional é um regime tributário simplificado para Microempresas (ME) e Empresas de Pequeno Porte (EPP).
+            Para mais informações, consulte o [Portal do Simples Nacional](http://www8.receita.fazenda.gov.br/SimplesNacional/).
+            """
+        )
+
         st.success("Consulta finalizada!")
