@@ -4,6 +4,7 @@ import requests
 import logging
 import time
 import os
+import tempfile
 import csv
 
 # Configuração do logging (pode ser opcional em Streamlit)
@@ -104,40 +105,43 @@ uploaded_file = st.file_uploader("Carregue o arquivo XLSX com os CNPJs", type="x
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
-        df_excel = pd.read_excel(uploaded_file)
+        chunk_size = 100  # Define o tamanho do chunk
         resultados = []  # Lista para armazenar os resultados
-        total_cnpjs = len(df_excel['CNPJ'])
+
         progress_bar = st.progress(0)  # Barra de progresso
 
-        # Diretório de saída
-        output_dir = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
-        output_file = os.path.join(output_dir, 'consultas_cnpj_resultados2.csv')
+        try:
+            reader = pd.read_excel(uploaded_file, chunksize=chunk_size)
+            total_rows = 0
+            for chunk in reader:
+                total_rows += len(chunk)
+        except Exception as e:
+            st.error(f"Erro ao ler o arquivo XLSX: {e}")
+            st.stop()  # Para a execução se houver erro na leitura
 
-        for index, cnpj in enumerate(df_excel['CNPJ']):
-            cnpj_limpo = limpar_cnpj(cnpj)
-            if verificar_cnpj_consultado(cnpj_limpo):
-                logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
-                continue
+        total_processed = 0
+        try:
+            reader = pd.read_excel(uploaded_file, chunksize=chunk_size)
+            for chunk in reader:
+                for index, row in chunk.iterrows():
+                    cnpj = row['CNPJ']
 
-            logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
-            dados_cnpj = consultar_cnpj(cnpj_limpo)
-            if dados_cnpj:
-                dados_empresa = extrair_dados_para_df(dados_cnpj)
-                resultados.append(dados_empresa)
+                    cnpj_limpo = limpar_cnpj(cnpj)
+                    if verificar_cnpj_consultado(cnpj_limpo):
+                        logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
+                        continue
 
-                # Registrar resultado no CSV
-                df_resultado = pd.DataFrame([dados_empresa])
-                if not os.path.exists(output_file):
-                    df_resultado.to_csv(output_file, index=False, mode='w', header=True, encoding='utf-8', sep=';')
-                else:
-                    df_resultado.to_csv(output_file, index=False, mode='a', header=False, encoding='utf-8', sep=';')
-                logging.info(f"Dados do CNPJ {cnpj_limpo} registrados no arquivo CSV.")
+                    logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
+                    dados_cnpj = consultar_cnpj(cnpj_limpo)
+                    if dados_cnpj:
+                        dados_empresa = extrair_dados_para_df(dados_cnpj)
+                        resultados.append(dados_empresa)
+                    total_processed += len(chunk)
+                    progress_bar.progress(total_processed / total_rows)
 
-            progress_bar.progress((index + 1) / total_cnpjs)  # Atualizar barra de progresso
-
-            if (index + 1) % 50 == 0:
-                logging.info("Aguardando 10 segundos antes de continuar...")
-                time.sleep(10)
+        except Exception as e:
+            st.error(f"Erro durante a consulta: {e}")
+            st.stop()  # Para a execução se houver erro na consulta
 
         st.dataframe(resultados)  # Exibir resultados como DataFrame
         st.success("Consulta finalizada!")
