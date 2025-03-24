@@ -79,8 +79,8 @@ def limpar_cnpj(cnpj):
 # Função para verificar se o CNPJ já foi consultado
 def verificar_cnpj_consultado(cnpj_limpo):
     arquivos_resultados = [
-        r"G:\Drives compartilhados\Cadastro BEES\CNPJ\consultas_cnpj_resultados2.csv",
-        r"G:\Drives compartilhados\Cadastro BEES\CNPJ\consultas_cnpj_resultados.csv",
+        r"G:\Meu Drive\BEES\consultas_cnpj_resultados2.csv",
+        r"G:\Meu Drive\BEES\consultas_cnpj_resultados.csv",
     ]
     for arquivo in arquivos_resultados:
         if os.path.exists(arquivo):
@@ -105,39 +105,36 @@ uploaded_file = st.file_uploader("Carregue o arquivo XLSX com os CNPJs", type="x
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
-        chunk_size = 100  # Define o tamanho do chunk
         resultados = []  # Lista para armazenar os resultados
 
         progress_bar = st.progress(0)  # Barra de progresso
 
         try:
-            reader = pd.read_excel(uploaded_file, chunksize=chunk_size)
-            total_rows = 0
-            for chunk in reader:
-                total_rows += len(chunk)
+            df_excel = pd.read_excel(uploaded_file)
+            total_rows = len(df_excel)  # Obtém o total de linhas do DataFrame
         except Exception as e:
             st.error(f"Erro ao ler o arquivo XLSX: {e}")
             st.stop()  # Para a execução se houver erro na leitura
 
         total_processed = 0
         try:
-            reader = pd.read_excel(uploaded_file, chunksize=chunk_size)
-            for chunk in reader:
-                for index, row in chunk.iterrows():
-                    cnpj = row['CNPJ']
+            # Itera sobre as linhas do DataFrame
+            for index, row in df_excel.iterrows():
+                cnpj = row['CNPJ']
+                cnpj_limpo = limpar_cnpj(cnpj)
 
-                    cnpj_limpo = limpar_cnpj(cnpj)
-                    if verificar_cnpj_consultado(cnpj_limpo):
-                        logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
-                        continue
+                if verificar_cnpj_consultado(cnpj_limpo):
+                    logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
+                    continue
 
-                    logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
-                    dados_cnpj = consultar_cnpj(cnpj_limpo)
-                    if dados_cnpj:
-                        dados_empresa = extrair_dados_para_df(dados_cnpj)
-                        resultados.append(dados_empresa)
-                    total_processed += len(chunk)
-                    progress_bar.progress(total_processed / total_rows)
+                logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
+                dados_cnpj = consultar_cnpj(cnpj_limpo)
+                if dados_cnpj:
+                    dados_empresa = extrair_dados_para_df(dados_cnpj)
+                    resultados.append(dados_empresa)
+
+                total_processed += 1
+                progress_bar.progress(total_processed / total_rows)
 
         except Exception as e:
             st.error(f"Erro durante a consulta: {e}")
