@@ -4,7 +4,6 @@ import requests
 import logging
 import time
 import os
-import tempfile
 import csv
 
 # Configuração do logging (pode ser opcional em Streamlit)
@@ -110,9 +109,9 @@ if uploaded_file is not None:
         total_cnpjs = len(df_excel['CNPJ'])
         progress_bar = st.progress(0)  # Barra de progresso
 
-        # Diretório de saída temporário
-        temp_dir = tempfile.gettempdir()
-        output_file = os.path.join(temp_dir, 'consultas_cnpj_resultados2.csv')
+        # Diretório de saída
+        output_dir = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
+        output_file = os.path.join(output_dir, 'consultas_cnpj_resultados2.csv')
 
         for index, cnpj in enumerate(df_excel['CNPJ']):
             cnpj_limpo = limpar_cnpj(cnpj)
@@ -128,11 +127,10 @@ if uploaded_file is not None:
 
                 # Registrar resultado no CSV
                 df_resultado = pd.DataFrame([dados_empresa])
-                try:
+                if not os.path.exists(output_file):
                     df_resultado.to_csv(output_file, index=False, mode='w', header=True, encoding='utf-8', sep=';')
-                except OSError as e:
-                    logging.error(f"Erro ao salvar arquivo CSV: {e}")
-
+                else:
+                    df_resultado.to_csv(output_file, index=False, mode='a', header=False, encoding='utf-8', sep=';')
                 logging.info(f"Dados do CNPJ {cnpj_limpo} registrados no arquivo CSV.")
 
             progress_bar.progress((index + 1) / total_cnpjs)  # Atualizar barra de progresso
