@@ -149,9 +149,12 @@ if uploaded_file is not None:
         pasta_destino = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
         nome_arquivo = "cnpjsconsultados.csv"
         caminho_completo = os.path.join(pasta_destino, nome_arquivo)
-
-        try:
-            df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8')
-            st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
-        except Exception as e:
-            st.error(f"Erro ao salvar o arquivo CSV: {e}")
+        
+        # Verificar se o diretório existe
+        if not os.path.exists(pasta_destino):
+            try:
+                os.makedirs(pasta_destino)  # Cria o diretório e subdiretórios, se necessário
+                st.info(f"Diretório criado: {pasta_destino}")
+            except OSError as e:
+                st.error(f"Erro ao criar o diretório {pasta_destino}: {e}")
+                st.stop()
