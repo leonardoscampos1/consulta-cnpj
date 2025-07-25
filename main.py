@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 
 # Chave da API
-API_KEY = #'953c550f-fa61-461a-98d4-16671d4a4360-835686e9-0df7-4b35-a353-749dc2b19d7f'
+API_KEY = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
 # Função para consultar o CNPJ com Simples Nacional
 def consultar_cnpj(cnpj):
