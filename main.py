@@ -99,6 +99,8 @@ def verificar_cnpj_consultado(cnpj_limpo):
 
 # Interface Streamlit
 st.title("Consulta de CNPJ com Simples Nacional")
+st.markdown("<h3 style='text-align: center; color: blue;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
+
 st.write("Criado por Leonardo Campos")
 
 uploaded_file = st.file_uploader("Carregue o arquivo XLSX com os CNPJs", type="xlsx")
