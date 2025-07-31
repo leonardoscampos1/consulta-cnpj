@@ -99,10 +99,11 @@ def verificar_cnpj_consultado(cnpj_limpo):
     return False
 
 # Interface Streamlit
-st.title("Consulta de CNPJ")
+st.markdown("<h2 style='text-align: center; color: yellow;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: blue;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nomeada como 'CNPJ'</h3>", unsafe_allow_html=True)
 uploaded_file = st.file_uploader("Carregue o arquivo XLSX.", type="xlsx")
+st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nomeada como 'CNPJ'</h3>", unsafe_allow_html=True)
+
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
