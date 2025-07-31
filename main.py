@@ -99,10 +99,10 @@ def verificar_cnpj_consultado(cnpj_limpo):
     return False
 
 # Interface Streamlit
-st.title("Consulta de CNPJ com Simples Nacional")
+st.title("Consulta de CNPJ")
 st.markdown("<h3 style='text-align: center; color: blue;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
-
-uploaded_file = st.file_uploader("Carregue o arquivo XLSX com os CNPJs", type="xlsx")
+st.markdown("<h2 style='text-align: center; color: red;'>A coluna deve estar nomeada como 'CNPJ'</h3>", unsafe_allow_html=True)
+uploaded_file = st.file_uploader("Carregue o arquivo XLSX.", type="xlsx")
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
