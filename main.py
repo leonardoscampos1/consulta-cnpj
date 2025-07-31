@@ -88,7 +88,7 @@ def verificar_cnpj_consultado(cnpj_limpo):
                 if arquivo.endswith("consultas_cnpj_resultados2.csv"):
                     df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
                 elif arquivo.endswith("consultas_cnpj_resultados.csv"):
-                    df_existente = pd.read_csv(arquivo, dtype=str, sep=',', on_bad_lines='skip')
+                    df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
                 else:
                     continue  # Pular arquivos desconhecidos
 
