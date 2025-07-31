@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import logging
 import os
+import time
 
 # Configuração do logging (pode ser opcional em Streamlit)
 logging.basicConfig(
@@ -108,6 +109,7 @@ if uploaded_file is not None:
         resultados = []  # Lista para armazenar os resultados
 
         progress_bar = st.progress(0)  # Barra de progresso
+        status_text = st.empty()  # Elemento de texto para exibir o status
 
         try:
             df_excel = pd.read_excel(uploaded_file)
@@ -117,6 +119,11 @@ if uploaded_file is not None:
             st.stop()  # Para a execução se houver erro na leitura
 
         total_processed = 0
+        
+        # Variáveis para a estimativa de tempo
+        start_time = time.time()
+        estimated_time_placeholder = st.empty()
+
         try:
             # Itera sobre as linhas do DataFrame
             for index, row in df_excel.iterrows():
@@ -128,6 +135,10 @@ if uploaded_file is not None:
                     continue
 
                 logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
+                
+                # Exibir o status atual
+                status_text.text(f"Consultando CNPJ {cnpj_limpo} ({total_processed + 1}/{total_rows})...")
+
                 dados_cnpj = consultar_cnpj(cnpj_limpo)
                 if dados_cnpj:
                     dados_empresa = extrair_dados_para_df(dados_cnpj)
@@ -135,10 +146,28 @@ if uploaded_file is not None:
 
                 total_processed += 1
                 progress_bar.progress(total_processed / total_rows)
+                
+                # Atualizar a estimativa de tempo
+                try:
+                    elapsed_time = time.time() - start_time
+                    avg_time_per_item = elapsed_time / total_processed
+                    remaining_items = total_rows - total_processed
+                    estimated_remaining_time = avg_time_per_item * remaining_items
+                    
+                    m, s = divmod(estimated_remaining_time, 60)
+                    h, m = divmod(m, 60)
+                    estimated_time_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
+                except:
+                    # Se ocorrer algum erro na estimativa, apenas ignora
+                    pass
 
         except Exception as e:
             st.error(f"Erro durante a consulta: {e}")
             st.stop()  # Para a execução se houver erro na consulta
+        
+        # Limpar os placeholders após o loop
+        status_text.empty()
+        estimated_time_placeholder.empty()
 
         st.dataframe(pd.DataFrame(resultados))  # Exibir resultados como DataFrame
 
