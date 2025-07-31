@@ -33,6 +33,7 @@ def consultar_cnpj(cnpj):
 
 # Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
+    # Dicionário base com os dados da empresa
     dados = {
         'CNPJ': dados_cnpj['taxId'],
         'Nome': dados_cnpj['company']['name'],
@@ -44,7 +45,6 @@ def extrair_dados_para_df(dados_cnpj):
         'Status': dados_cnpj['status']['text'],
         'Data de Status': dados_cnpj['statusDate'],
         'Razão de Status': dados_cnpj.get('reason', {}).get('text', 'Não disponível'),
-        'Endereço': f"{dados_cnpj['address']['street']}, {dados_cnpj['address']['number']}, {dados_cnpj['address']['details']}, {dados_cnpj['address']['district']}, {dados_cnpj['address']['city']}/{dados_cnpj['address']['state']}, {dados_cnpj['address']['zip']}",
         'País': dados_cnpj['address']['country']['name'],
         'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
         'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
@@ -55,6 +55,17 @@ def extrair_dados_para_df(dados_cnpj):
         'SIMEI Optante': dados_cnpj['company']['simei']['optant'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
         'SIMEI Desde': dados_cnpj['company']['simei']['since'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
     }
+
+    # Separar os dados do endereço em colunas individuais
+    endereco = dados_cnpj['address']
+    dados['Rua'] = endereco['street']
+    dados['Número'] = endereco['number']
+    dados['Complemento'] = endereco.get('details', 'Não disponível')
+    dados['Bairro'] = endereco['district']
+    dados['Cidade'] = endereco['city']
+    dados['UF'] = endereco['state']
+    dados['CEP'] = endereco['zip']
+    
     # Inscrição Estadual
     if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
         inscricao_estadual = dados_cnpj['registrations'][0]
@@ -85,13 +96,8 @@ def verificar_cnpj_consultado(cnpj_limpo):
     for arquivo in arquivos_resultados:
         if os.path.exists(arquivo):
             try:
-                if arquivo.endswith("consultas_cnpj_resultados2.csv"):
-                    df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
-                elif arquivo.endswith("consultas_cnpj_resultados.csv"):
-                    df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
-                else:
-                    continue  # Pular arquivos desconhecidos
-
+                # O parâmetro on_bad_lines='skip' foi renomeado para on_bad_lines='skip' no pandas 2.0+
+                df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
                 if cnpj_limpo in df_existente['CNPJ'].apply(limpar_cnpj).values:
                     return True
             except pd.errors.ParserError as e:
@@ -103,7 +109,6 @@ st.markdown("<h1 style='text-align: center; color: yellow;'>Consulta CNPJ</h3>",
 st.markdown("<h3 style='text-align: center; color: blue;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
 uploaded_file = st.file_uploader("Carregue o arquivo XLSX.", type="xlsx")
 st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nomeada como 'CNPJ'</h3>", unsafe_allow_html=True)
-
 
 if uploaded_file is not None:
     if st.button("Iniciar Consulta"):
@@ -133,6 +138,8 @@ if uploaded_file is not None:
 
                 if verificar_cnpj_consultado(cnpj_limpo):
                     logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
+                    total_processed += 1
+                    progress_bar.progress(total_processed / total_rows)
                     continue
 
                 logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
@@ -144,6 +151,8 @@ if uploaded_file is not None:
                 if dados_cnpj:
                     dados_empresa = extrair_dados_para_df(dados_cnpj)
                     resultados.append(dados_empresa)
+                else:
+                    st.warning(f"Não foi possível consultar o CNPJ: {cnpj_limpo}")
 
                 total_processed += 1
                 progress_bar.progress(total_processed / total_rows)
@@ -170,16 +179,23 @@ if uploaded_file is not None:
         status_text.empty()
         estimated_time_placeholder.empty()
 
-        st.dataframe(pd.DataFrame(resultados))  # Exibir resultados como DataFrame
+        # Finalizar a barra de progresso
+        progress_bar.progress(1.0)
+        
+        if resultados:
+            df_resultados = pd.DataFrame(resultados)
+            st.success("Consulta finalizada com sucesso!")
+            st.dataframe(df_resultados)  # Exibir resultados como DataFrame
 
-        # Salvar resultados em CSV na pasta especificada
-        df_resultados = pd.DataFrame(resultados)
-        pasta_destino = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
-        nome_arquivo = "cnpjsconsultados.csv"
-        caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+            # Salvar resultados em CSV na pasta especificada
+            pasta_destino = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
+            nome_arquivo = "cnpjsconsultados.csv"
+            caminho_completo = os.path.join(pasta_destino, nome_arquivo)
 
-        try:
-            df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8')
-            st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
-        except Exception as e:
-            st.error(f"Erro ao salvar o arquivo CSV: {e}")
+            try:
+                df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8', sep=';')
+                st.success(f"Arquivo CSV salvo em: {caminho_completo}")
+            except Exception as e:
+                st.error(f"Erro ao salvar o arquivo CSV: {e}")
+        else:
+            st.warning("Nenhum CNPJ foi consultado ou todos já haviam sido processados.")
