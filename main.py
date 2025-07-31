@@ -172,10 +172,10 @@ if uploaded_file is not None:
             st.success("Consulta finalizada com sucesso!")
             st.dataframe(df_resultados)
 
-            # Criar um buffer de memória para o arquivo CSV
+            # Criar um buffer de memória para o arquivo CSV com a codificação correta
             csv_buffer = BytesIO()
-            df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8', sep=';')
-            csv_buffer.seek(0) # Volta o cursor para o início do buffer
+            df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=';')
+            csv_buffer.seek(0)
             
             # Botão de download
             st.download_button(
@@ -186,6 +186,6 @@ if uploaded_file is not None:
             )
             
             st.write("---")
-            st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha.")
+            st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha. O arquivo foi salvo com codificação **`UTF-8-SIG`** para aceitar caracteres especiais no Excel.")
         else:
             st.warning("Nenhum CNPJ foi consultado.")
