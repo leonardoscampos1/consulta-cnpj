@@ -4,6 +4,7 @@ import requests
 import logging
 import os
 import time
+from io import BytesIO
 
 # Configuração do logging (pode ser opcional em Streamlit)
 logging.basicConfig(
@@ -89,19 +90,7 @@ def limpar_cnpj(cnpj):
 
 # Função para verificar se o CNPJ já foi consultado
 def verificar_cnpj_consultado(cnpj_limpo):
-    arquivos_resultados = [
-        r"G:\Meu Drive\BEES\consultas_cnpj_resultados2.csv",
-        r"G:\Meu Drive\BEES\consultas_cnpj_resultados.csv",
-    ]
-    for arquivo in arquivos_resultados:
-        if os.path.exists(arquivo):
-            try:
-                # O parâmetro on_bad_lines='skip' foi renomeado para on_bad_lines='skip' no pandas 2.0+
-                df_existente = pd.read_csv(arquivo, dtype=str, sep=';', on_bad_lines='skip')
-                if cnpj_limpo in df_existente['CNPJ'].apply(limpar_cnpj).values:
-                    return True
-            except pd.errors.ParserError as e:
-                logging.error(f"Erro ao ler arquivo {arquivo}: {e}")
+    # Removendo a checagem de arquivos locais fixos para maior portabilidade
     return False
 
 # Interface Streamlit
@@ -168,34 +157,35 @@ if uploaded_file is not None:
                     h, m = divmod(m, 60)
                     estimated_time_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
                 except:
-                    # Se ocorrer algum erro na estimativa, apenas ignora
                     pass
 
         except Exception as e:
             st.error(f"Erro durante a consulta: {e}")
-            st.stop()  # Para a execução se houver erro na consulta
+            st.stop()
         
-        # Limpar os placeholders após o loop
         status_text.empty()
         estimated_time_placeholder.empty()
-
-        # Finalizar a barra de progresso
         progress_bar.progress(1.0)
         
         if resultados:
             df_resultados = pd.DataFrame(resultados)
             st.success("Consulta finalizada com sucesso!")
-            st.dataframe(df_resultados)  # Exibir resultados como DataFrame
+            st.dataframe(df_resultados)
 
-            # Salvar resultados em CSV na pasta especificada
-            pasta_destino = r"G:\Drives compartilhados\Cadastro BEES\CNPJ"
-            nome_arquivo = "cnpjsconsultados.csv"
-            caminho_completo = os.path.join(pasta_destino, nome_arquivo)
-
-            try:
-                df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8', sep=';')
-                st.success(f"Arquivo CSV salvo em: {caminho_completo}")
-            except Exception as e:
-                st.error(f"Erro ao salvar o arquivo CSV: {e}")
+            # Criar um buffer de memória para o arquivo CSV
+            csv_buffer = BytesIO()
+            df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8', sep=';')
+            csv_buffer.seek(0) # Volta o cursor para o início do buffer
+            
+            # Botão de download
+            st.download_button(
+                label="Baixar arquivo CSV",
+                data=csv_buffer,
+                file_name="cnpjsconsultados.csv",
+                mime="text/csv",
+            )
+            
+            st.write("---")
+            st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha.")
         else:
-            st.warning("Nenhum CNPJ foi consultado ou todos já haviam sido processados.")
+            st.warning("Nenhum CNPJ foi consultado.")
