@@ -6,7 +6,7 @@ import os
 import time
 from io import BytesIO
 
-# Configuração do logging (pode ser opcional em Streamlit)
+# Configuração do logging
 logging.basicConfig(
     filename='consulta_cnpj.log',
     level=logging.INFO,
@@ -14,32 +14,23 @@ logging.basicConfig(
 )
 
 # Chave da API
-API_KEY = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
+CHAVE_API = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
-# Função para consultar o CNPJ com Simples Nacional
-def consultar_cnpj(cnpj, max_retries=3, delay_seconds=5):
-    """
-    Função para consultar o CNPJ com Simples Nacional, com tentativas de repetição.
-    """
+# Função para consultar o CNPJ
+def consultar_cnpj(cnpj):
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
-    headers = {'Authorization': API_KEY}
-    
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
-                return response.json()
-            else:
-                logging.warning(f"Tentativa {attempt + 1}: Erro ao consultar CNPJ {cnpj}: {response.status_code}. Tentando novamente em {delay_seconds} segundos...")
-                time.sleep(delay_seconds) # Espera antes de tentar novamente
-        except Exception as e:
-            logging.error(f"Tentativa {attempt + 1}: Erro ao tentar consultar o CNPJ {cnpj}: {e}. Tentando novamente em {delay_seconds} segundos...")
-            time.sleep(delay_seconds) # Espera antes de tentar novamente
-
-    # Se todas as tentativas falharem
-    logging.error(f"Todas as {max_retries} tentativas para o CNPJ {cnpj} falharam.")
-    return None
+    headers = {'Authorization': CHAVE_API}
+    try:
+        resposta = requests.get(url, headers=headers)
+        if resposta.status_code == 200:
+            logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
+            return resposta.json()
+        else:
+            logging.error(f"Erro ao consultar CNPJ {cnpj}: {resposta.status_code}")
+            return None
+    except Exception as e:
+        logging.error(f"Erro ao tentar consultar o CNPJ {cnpj}: {e}")
+        return None
 
 # Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
@@ -59,7 +50,7 @@ def extrair_dados_para_df(dados_cnpj):
         'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
         'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
         'Atividade Principal': dados_cnpj['mainActivity']['text'],
-        'Atividades Secundárias': ', '.join([activity['text'] for activity in dados_cnpj['sideActivities']]) if dados_cnpj['sideActivities'] else 'Nenhuma',
+        'Atividades Secundárias': ', '.join([atividade['text'] for atividade in dados_cnpj['sideActivities']]) if dados_cnpj['sideActivities'] else 'Nenhuma',
         'Simples Nacional Optante': dados_cnpj['company']['simples']['optant'] if 'simples' in dados_cnpj['company'] else 'Não disponível',
         'Simples Nacional Desde': dados_cnpj['company']['simples']['since'] if 'simples' in dados_cnpj['company'] else 'Não disponível',
         'SIMEI Optante': dados_cnpj['company']['simei']['optant'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
@@ -97,74 +88,72 @@ def extrair_dados_para_df(dados_cnpj):
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
 
-# Função para verificar se o CNPJ já foi consultado
+# Função para verificar se o CNPJ já foi consultado (mantida para compatibilidade)
 def verificar_cnpj_consultado(cnpj_limpo):
-    # Removendo a checagem de arquivos locais fixos para maior portabilidade
     return False
 
 # Interface Streamlit
 st.markdown("<h1 style='text-align: center; color: yellow;'>Consulta CNPJ</h3>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: blue;'>Criado por Leonardo Campos</h3>", unsafe_allow_html=True)
-uploaded_file = st.file_uploader("Carregue o arquivo XLSX.", type="xlsx")
+arquivo_carregado = st.file_uploader("Carregue o arquivo XLSX.", type="xlsx")
 st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nomeada como 'CNPJ'</h3>", unsafe_allow_html=True)
 
-if uploaded_file is not None:
+if arquivo_carregado is not None:
     if st.button("Iniciar Consulta"):
-        resultados = []  # Lista para armazenar os resultados
-
-        progress_bar = st.progress(0)  # Barra de progresso
-        status_text = st.empty()  # Elemento de texto para exibir o status
+        resultados = []
+        barra_de_progresso = st.progress(0)
+        status_texto = st.empty()
 
         try:
-            df_excel = pd.read_excel(uploaded_file)
-            total_rows = len(df_excel)  # Obtém o total de linhas do DataFrame
+            df_excel = pd.read_excel(arquivo_carregado)
+            total_linhas = len(df_excel)
         except Exception as e:
             st.error(f"Erro ao ler o arquivo XLSX: {e}")
-            st.stop()  # Para a execução se houver erro na leitura
+            st.stop()
 
-        total_processed = 0
-        
-        # Variáveis para a estimativa de tempo
-        start_time = time.time()
-        estimated_time_placeholder = st.empty()
+        total_processados = 0
+        tempo_inicial = time.time()
+        estimativa_tempo_placeholder = st.empty()
 
         try:
-            # Itera sobre as linhas do DataFrame
-            for index, row in df_excel.iterrows():
-                cnpj = str(row['CNPJ'])  # Garante que CNPJ seja string
+            for indice, linha in df_excel.iterrows():
+                cnpj = str(linha['CNPJ'])
                 cnpj_limpo = limpar_cnpj(cnpj)
 
                 if verificar_cnpj_consultado(cnpj_limpo):
                     logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
-                    total_processed += 1
-                    progress_bar.progress(total_processed / total_rows)
+                    total_processados += 1
+                    barra_de_progresso.progress(total_processados / total_linhas)
                     continue
 
                 logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
-                
-                # Exibir o status atual
-                status_text.text(f"Consultando CNPJ {cnpj_limpo} ({total_processed + 1}/{total_rows})...")
+                status_texto.text(f"Consultando CNPJ {cnpj_limpo} ({total_processados + 1}/{total_linhas})...")
 
+                # Controle de taxa: pausa de 15s a cada 15 consultas
+                if (total_processados > 0) and (total_processados % 15 == 0):
+                    st.info("Aguardando 15 segundos para respeitar o limite de consultas por minuto...")
+                    time.sleep(15)
+                    st.info("Continuando a consulta...")
+                
                 dados_cnpj = consultar_cnpj(cnpj_limpo)
                 if dados_cnpj:
                     dados_empresa = extrair_dados_para_df(dados_cnpj)
                     resultados.append(dados_empresa)
                 else:
                     st.warning(f"Não foi possível consultar o CNPJ: {cnpj_limpo}")
-
-                total_processed += 1
-                progress_bar.progress(total_processed / total_rows)
-                
-                # Atualizar a estimativa de tempo
-                try:
-                    elapsed_time = time.time() - start_time
-                    avg_time_per_item = elapsed_time / total_processed
-                    remaining_items = total_rows - total_processed
-                    estimated_remaining_time = avg_time_per_item * remaining_items
                     
-                    m, s = divmod(estimated_remaining_time, 60)
+                total_processados += 1
+                barra_de_progresso.progress(total_processados / total_linhas)
+                
+                try:
+                    tempo_decorrido = time.time() - tempo_inicial
+                    tempo_medio_por_item = tempo_decorrido / total_processados
+                    itens_restantes = total_linhas - total_processados
+                    tempo_restante_estimado = tempo_medio_por_item * itens_restantes
+                    
+                    m, s = divmod(tempo_restante_estimado, 60)
                     h, m = divmod(m, 60)
-                    estimated_time_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
+                    estimativa_tempo_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
                 except:
                     pass
 
@@ -172,21 +161,19 @@ if uploaded_file is not None:
             st.error(f"Erro durante a consulta: {e}")
             st.stop()
         
-        status_text.empty()
-        estimated_time_placeholder.empty()
-        progress_bar.progress(1.0)
+        status_texto.empty()
+        estimativa_tempo_placeholder.empty()
+        barra_de_progresso.progress(1.0)
         
         if resultados:
             df_resultados = pd.DataFrame(resultados)
             st.success("Consulta finalizada com sucesso!")
             st.dataframe(df_resultados)
 
-            # Criar um buffer de memória para o arquivo CSV com a codificação correta
             csv_buffer = BytesIO()
             df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=';')
             csv_buffer.seek(0)
             
-            # Botão de download
             st.download_button(
                 label="Baixar arquivo CSV",
                 data=csv_buffer,
