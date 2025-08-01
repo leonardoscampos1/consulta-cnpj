@@ -17,20 +17,29 @@ logging.basicConfig(
 API_KEY = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
 # Função para consultar o CNPJ com Simples Nacional
-def consultar_cnpj(cnpj):
+def consultar_cnpj(cnpj, max_retries=3, delay_seconds=5):
+    """
+    Função para consultar o CNPJ com Simples Nacional, com tentativas de repetição.
+    """
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
     headers = {'Authorization': API_KEY}
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
-            return response.json()
-        else:
-            logging.error(f"Erro ao consultar CNPJ {cnpj}: {response.status_code}")
-            return None
-    except Exception as e:
-        logging.error(f"Erro ao tentar consultar o CNPJ {cnpj}: {e}")
-        return None
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
+                return response.json()
+            else:
+                logging.warning(f"Tentativa {attempt + 1}: Erro ao consultar CNPJ {cnpj}: {response.status_code}. Tentando novamente em {delay_seconds} segundos...")
+                time.sleep(delay_seconds) # Espera antes de tentar novamente
+        except Exception as e:
+            logging.error(f"Tentativa {attempt + 1}: Erro ao tentar consultar o CNPJ {cnpj}: {e}. Tentando novamente em {delay_seconds} segundos...")
+            time.sleep(delay_seconds) # Espera antes de tentar novamente
+
+    # Se todas as tentativas falharem
+    logging.error(f"Todas as {max_retries} tentativas para o CNPJ {cnpj} falharam.")
+    return None
 
 # Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
