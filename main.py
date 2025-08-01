@@ -14,27 +14,35 @@ logging.basicConfig(
 )
 
 # Chave da API
-CHAVE_API = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
+CHAVE_API = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
-# Função para consultar o CNPJ
-def consultar_cnpj(cnpj):
+# Função para consultar o CNPJ com múltiplas tentativas (sem avisos na tela)
+def consultar_cnpj_com_tentativas(cnpj, max_tentativas=3, intervalo_segundos=15):
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
     headers = {'Authorization': CHAVE_API}
-    try:
-        resposta = requests.get(url, headers=headers)
-        if resposta.status_code == 200:
-            logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
-            return resposta.json()
-        else:
-            logging.error(f"Erro ao consultar CNPJ {cnpj}: {resposta.status_code}")
-            return None
-    except Exception as e:
-        logging.error(f"Erro ao tentar consultar o CNPJ {cnpj}: {e}")
-        return None
+    for tentativa in range(max_tentativas):
+        try:
+            resposta = requests.get(url, headers=headers)
+            if resposta.status_code == 200:
+                logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
+                return resposta.json()
+            else:
+                logging.warning(f"Tentativa {tentativa + 1}: Erro ao consultar CNPJ {cnpj}: {resposta.status_code}.")
+                if tentativa < max_tentativas - 1:
+                    time.sleep(intervalo_segundos)
+        except Exception as e:
+            logging.error(f"Tentativa {tentativa + 1}: Erro ao tentar consultar o CNPJ {cnpj}: {e}.")
+            if tentativa < max_tentativas - 1:
+                time.sleep(intervalo_segundos)
+    
+    logging.error(f"Todas as {max_tentativas} tentativas para o CNPJ {cnpj} falharam.")
+    return None
 
 # Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
-    # Dicionário base com os dados da empresa
+    if not dados_cnpj:
+        return {'CNPJ': 'Falha na Consulta', 'Nome': 'Não disponível', 'Status': 'Falha na Consulta'}
+        
     dados = {
         'CNPJ': dados_cnpj['taxId'],
         'Nome': dados_cnpj['company']['name'],
@@ -57,7 +65,6 @@ def extrair_dados_para_df(dados_cnpj):
         'SIMEI Desde': dados_cnpj['company']['simei']['since'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
     }
 
-    # Separar os dados do endereço em colunas individuais
     endereco = dados_cnpj['address']
     dados['Rua'] = endereco['street']
     dados['Número'] = endereco['number']
@@ -67,7 +74,6 @@ def extrair_dados_para_df(dados_cnpj):
     dados['UF'] = endereco['state']
     dados['CEP'] = endereco['zip']
     
-    # Inscrição Estadual
     if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
         inscricao_estadual = dados_cnpj['registrations'][0]
         dados['Inscrição Estadual Estado'] = inscricao_estadual['state']
@@ -101,6 +107,7 @@ st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nom
 if arquivo_carregado is not None:
     if st.button("Iniciar Consulta"):
         resultados = []
+        cnpjs_com_falha = []
         barra_de_progresso = st.progress(0)
         status_texto = st.empty()
 
@@ -129,16 +136,14 @@ if arquivo_carregado is not None:
                 logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
                 status_texto.text(f"Consultando CNPJ {cnpj_limpo} ({total_processados + 1}/{total_linhas})...")
                 
-                dados_cnpj = consultar_cnpj(cnpj_limpo)
+                dados_cnpj = consultar_cnpj_com_tentativas(cnpj_limpo)
+
                 if dados_cnpj:
                     dados_empresa = extrair_dados_para_df(dados_cnpj)
                     resultados.append(dados_empresa)
                 else:
-                    st.warning(f"Não foi possível consultar o CNPJ: {cnpj_limpo}")
-                    st.info("Pausando por 15 segundos para tentar novamente ou estabilizar a conexão.")
-                    time.sleep(15)
-                    st.info("Continuando a consulta...")
-                    
+                    cnpjs_com_falha.append({'CNPJ': cnpj_limpo, 'Motivo da Falha': 'Não foi possível consultar após 3 tentativas.'})
+                
                 total_processados += 1
                 barra_de_progresso.progress(total_processados / total_linhas)
                 
@@ -182,3 +187,10 @@ if arquivo_carregado is not None:
             st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha. O arquivo foi salvo com codificação **`UTF-8-SIG`** para aceitar caracteres especiais no Excel.")
         else:
             st.warning("Nenhum CNPJ foi consultado.")
+
+        # --- Apresenta a lista de CNPJs com falha no final ---
+        if cnpjs_com_falha:
+            st.write("---")
+            st.error("Os seguintes CNPJs não puderam ser consultados:")
+            df_falhas = pd.DataFrame(cnpjs_com_falha)
+            st.dataframe(df_falhas)
