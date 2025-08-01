@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 # Chave da API
-CHAVE_API = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
+CHAVE_API = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
 
 # Função para consultar o CNPJ
 def consultar_cnpj(cnpj):
