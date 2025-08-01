@@ -131,9 +131,7 @@ if arquivo_carregado is not None:
 
                 # Controle de taxa: pausa de 15s a cada 15 consultas
                 if (total_processados > 0) and (total_processados % 15 == 0):
-                    st.info("Aguardando 15 segundos para respeitar o limite de consultas por minuto...")
                     time.sleep(15)
-                    st.info("Continuando a consulta...")
                 
                 dados_cnpj = consultar_cnpj(cnpj_limpo)
                 if dados_cnpj:
