@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 # Chave da API
-CHAVE_API = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
+CHAVE_API = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
 # Função para consultar o CNPJ
 def consultar_cnpj(cnpj):
@@ -128,10 +128,6 @@ if arquivo_carregado is not None:
 
                 logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
                 status_texto.text(f"Consultando CNPJ {cnpj_limpo} ({total_processados + 1}/{total_linhas})...")
-
-                # Pausa de 15s a cada 60 consultas
-                if (total_processados > 0) and (total_processados % 60 == 0):
-                    time.sleep(15)
                 
                 dados_cnpj = consultar_cnpj(cnpj_limpo)
                 if dados_cnpj:
@@ -139,6 +135,9 @@ if arquivo_carregado is not None:
                     resultados.append(dados_empresa)
                 else:
                     st.warning(f"Não foi possível consultar o CNPJ: {cnpj_limpo}")
+                    st.info("Pausando por 15 segundos para tentar novamente ou estabilizar a conexão.")
+                    time.sleep(15)
+                    st.info("Continuando a consulta...")
                     
                 total_processados += 1
                 barra_de_progresso.progress(total_processados / total_linhas)
