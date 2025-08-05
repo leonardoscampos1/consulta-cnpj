@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuração do logging
 logging.basicConfig(
@@ -16,22 +17,25 @@ logging.basicConfig(
 # Chave da API
 CHAVE_API = '1a18e6b7-c531-4335-bc58-281dbd02faaf-abd2b77a-73ca-45ae-ace2-e8d7bd13daf3'
 
-# Função para consultar o CNPJ com múltiplas tentativas (sem avisos na tela)
+# Função para consultar o CNPJ com múltiplas tentativas
 def consultar_cnpj_com_tentativas(cnpj, max_tentativas=3, intervalo_segundos=15):
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
     headers = {'Authorization': CHAVE_API}
     for tentativa in range(max_tentativas):
         try:
-            resposta = requests.get(url, headers=headers)
+            resposta = requests.get(url, headers=headers, timeout=30)  # Adicionado timeout
             if resposta.status_code == 200:
                 logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
                 return resposta.json()
+            elif resposta.status_code == 429:
+                logging.warning(f"Tentativa {tentativa + 1}: Limite de requisições excedido para o CNPJ {cnpj}. Aguardando...")
+                time.sleep(intervalo_segundos * 2) # Espera mais tempo por causa do limite
             else:
                 logging.warning(f"Tentativa {tentativa + 1}: Erro ao consultar CNPJ {cnpj}: {resposta.status_code}.")
-                if tentativa < max_tentativas - 1:
-                    time.sleep(intervalo_segundos)
-        except Exception as e:
-            logging.error(f"Tentativa {tentativa + 1}: Erro ao tentar consultar o CNPJ {cnpj}: {e}.")
+            if tentativa < max_tentativas - 1:
+                time.sleep(intervalo_segundos)
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Tentativa {tentativa + 1}: Erro de requisição para o CNPJ {cnpj}: {e}.")
             if tentativa < max_tentativas - 1:
                 time.sleep(intervalo_segundos)
     
@@ -55,32 +59,32 @@ def extrair_dados_para_df(dados_cnpj):
         'Data de Status': dados_cnpj['statusDate'],
         'Razão de Status': dados_cnpj.get('reason', {}).get('text', 'Não disponível'),
         'País': dados_cnpj['address']['country']['name'],
-        'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
-        'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
+        'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj.get('phones', [])]) if dados_cnpj.get('phones') else 'Não disponível',
+        'Email': ', '.join([email['address'] for email in dados_cnpj.get('emails', [])]) if dados_cnpj.get('emails') else 'Não disponível',
         'Atividade Principal': dados_cnpj['mainActivity']['text'],
-        'Atividades Secundárias': ', '.join([atividade['text'] for atividade in dados_cnpj['sideActivities']]) if dados_cnpj['sideActivities'] else 'Nenhuma',
-        'Simples Nacional Optante': dados_cnpj['company']['simples']['optant'] if 'simples' in dados_cnpj['company'] else 'Não disponível',
-        'Simples Nacional Desde': dados_cnpj['company']['simples']['since'] if 'simples' in dados_cnpj['company'] else 'Não disponível',
-        'SIMEI Optante': dados_cnpj['company']['simei']['optant'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
-        'SIMEI Desde': dados_cnpj['company']['simei']['since'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
+        'Atividades Secundárias': ', '.join([atividade['text'] for atividade in dados_cnpj.get('sideActivities', [])]) if dados_cnpj.get('sideActivities') else 'Nenhuma',
+        'Simples Nacional Optante': dados_cnpj['company'].get('simples', {}).get('optant', 'Não disponível'),
+        'Simples Nacional Desde': dados_cnpj['company'].get('simples', {}).get('since', 'Não disponível'),
+        'SIMEI Optante': dados_cnpj['company'].get('simei', {}).get('optant', 'Não disponível'),
+        'SIMEI Desde': dados_cnpj['company'].get('simei', {}).get('since', 'Não disponível'),
     }
 
-    endereco = dados_cnpj['address']
-    dados['Rua'] = endereco['street']
-    dados['Número'] = endereco['number']
+    endereco = dados_cnpj.get('address', {})
+    dados['Rua'] = endereco.get('street', 'Não disponível')
+    dados['Número'] = endereco.get('number', 'Não disponível')
     dados['Complemento'] = endereco.get('details', 'Não disponível')
-    dados['Bairro'] = endereco['district']
-    dados['Cidade'] = endereco['city']
-    dados['UF'] = endereco['state']
-    dados['CEP'] = endereco['zip']
+    dados['Bairro'] = endereco.get('district', 'Não disponível')
+    dados['Cidade'] = endereco.get('city', 'Não disponível')
+    dados['UF'] = endereco.get('state', 'Não disponível')
+    dados['CEP'] = endereco.get('zip', 'Não disponível')
     
-    if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
+    if 'registrations' in dados_cnpj and dados_cnpj['registrations']:
         inscricao_estadual = dados_cnpj['registrations'][0]
-        dados['Inscrição Estadual Estado'] = inscricao_estadual['state']
-        dados['Inscrição Estadual Número'] = inscricao_estadual['number']
-        dados['Inscrição Estadual Status'] = inscricao_estadual['status']['text']
-        dados['Inscrição Estadual Tipo'] = inscricao_estadual['type']['text']
-        dados['Inscrição Estadual Data de Status'] = inscricao_estadual['statusDate']
+        dados['Inscrição Estadual Estado'] = inscricao_estadual.get('state', 'Não encontrada')
+        dados['Inscrição Estadual Número'] = inscricao_estadual.get('number', 'Não encontrada')
+        dados['Inscrição Estadual Status'] = inscricao_estadual.get('status', {}).get('text', 'Não encontrada')
+        dados['Inscrição Estadual Tipo'] = inscricao_estadual.get('type', {}).get('text', 'Não encontrada')
+        dados['Inscrição Estadual Data de Status'] = inscricao_estadual.get('statusDate', 'Não encontrada')
     else:
         dados['Inscrição Estadual Estado'] = 'Não encontrada'
         dados['Inscrição Estadual Número'] = 'Não encontrada'
@@ -94,9 +98,52 @@ def extrair_dados_para_df(dados_cnpj):
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
 
-# Função para verificar se o CNPJ já foi consultado (mantida para compatibilidade)
-def verificar_cnpj_consultado(cnpj_limpo):
-    return False
+# Função principal de consulta com multithreading
+def consultar_todos_cnpjs(cnpjs, barra_de_progresso, status_texto, estimativa_tempo_placeholder):
+    resultados = []
+    cnpjs_com_falha = []
+    total_linhas = len(cnpjs)
+    total_processados = 0
+    tempo_inicial = time.time()
+    
+    # Define o número de threads (ajuste conforme a capacidade da API e do seu sistema)
+    num_threads = min(32, total_linhas)
+    
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        # Envia as tarefas para o executor
+        tarefas = {executor.submit(consultar_cnpj_com_tentativas, cnpj): cnpj for cnpj in cnpjs}
+        
+        for tarefa in as_completed(tarefas):
+            cnpj = tarefas[tarefa]
+            try:
+                dados_cnpj = tarefa.result()
+                if dados_cnpj:
+                    dados_empresa = extrair_dados_para_df(dados_cnpj)
+                    resultados.append(dados_empresa)
+                else:
+                    cnpjs_com_falha.append({'CNPJ': cnpj, 'Motivo da Falha': 'Não foi possível consultar após 3 tentativas.'})
+            except Exception as e:
+                logging.error(f"Erro ao processar a tarefa para o CNPJ {cnpj}: {e}")
+                cnpjs_com_falha.append({'CNPJ': cnpj, 'Motivo da Falha': f'Erro inesperado: {e}'})
+            
+            total_processados += 1
+            barra_de_progresso.progress(total_processados / total_linhas)
+            status_texto.text(f"Consultando... {total_processados}/{total_linhas} CNPJs processados.")
+            
+            # Atualiza a estimativa de tempo
+            try:
+                tempo_decorrido = time.time() - tempo_inicial
+                tempo_medio_por_item = tempo_decorrido / total_processados
+                itens_restantes = total_linhas - total_processados
+                tempo_restante_estimado = tempo_medio_por_item * itens_restantes
+                
+                m, s = divmod(tempo_restante_estimado, 60)
+                h, m = divmod(m, 60)
+                estimativa_tempo_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
+            except:
+                pass
+                
+    return resultados, cnpjs_com_falha
 
 # Interface Streamlit
 st.markdown("<h1 style='text-align: center; color: yellow;'>Consulta CNPJ</h3>", unsafe_allow_html=True)
@@ -106,91 +153,56 @@ st.markdown("<h4 style='text-align: center; color: red;'>A coluna deve estar nom
 
 if arquivo_carregado is not None:
     if st.button("Iniciar Consulta"):
-        resultados = []
-        cnpjs_com_falha = []
-        barra_de_progresso = st.progress(0)
-        status_texto = st.empty()
-
         try:
             df_excel = pd.read_excel(arquivo_carregado)
-            total_linhas = len(df_excel)
-        except Exception as e:
-            st.error(f"Erro ao ler o arquivo XLSX: {e}")
-            st.stop()
-
-        total_processados = 0
-        tempo_inicial = time.time()
-        estimativa_tempo_placeholder = st.empty()
-
-        try:
-            for indice, linha in df_excel.iterrows():
-                cnpj = str(linha['CNPJ'])
-                cnpj_limpo = limpar_cnpj(cnpj)
-
-                if verificar_cnpj_consultado(cnpj_limpo):
-                    logging.info(f"CNPJ {cnpj_limpo} já consultado. Pulando...")
-                    total_processados += 1
-                    barra_de_progresso.progress(total_processados / total_linhas)
-                    continue
-
-                logging.info(f"Iniciando consulta para o CNPJ: {cnpj_limpo}")
-                status_texto.text(f"Consultando CNPJ {cnpj_limpo} ({total_processados + 1}/{total_linhas})...")
-                
-                dados_cnpj = consultar_cnpj_com_tentativas(cnpj_limpo)
-
-                if dados_cnpj:
-                    dados_empresa = extrair_dados_para_df(dados_cnpj)
-                    resultados.append(dados_empresa)
-                else:
-                    cnpjs_com_falha.append({'CNPJ': cnpj_limpo, 'Motivo da Falha': 'Não foi possível consultar após 3 tentativas.'})
-                
-                total_processados += 1
-                barra_de_progresso.progress(total_processados / total_linhas)
-                
-                try:
-                    tempo_decorrido = time.time() - tempo_inicial
-                    tempo_medio_por_item = tempo_decorrido / total_processados
-                    itens_restantes = total_linhas - total_processados
-                    tempo_restante_estimado = tempo_medio_por_item * itens_restantes
-                    
-                    m, s = divmod(tempo_restante_estimado, 60)
-                    h, m = divmod(m, 60)
-                    estimativa_tempo_placeholder.markdown(f"**Tempo restante estimado:** {int(h)}h {int(m)}min {int(s)}s")
-                except:
-                    pass
-
-        except Exception as e:
-            st.error(f"Erro durante a consulta: {e}")
-            st.stop()
-        
-        status_texto.empty()
-        estimativa_tempo_placeholder.empty()
-        barra_de_progresso.progress(1.0)
-        
-        if resultados:
-            df_resultados = pd.DataFrame(resultados)
-            st.success("Consulta finalizada com sucesso!")
-            st.dataframe(df_resultados)
-
-            csv_buffer = BytesIO()
-            df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=';')
-            csv_buffer.seek(0)
+            if 'CNPJ' not in df_excel.columns:
+                st.error("A coluna 'CNPJ' não foi encontrada no arquivo. Por favor, verifique o nome da coluna.")
+                st.stop()
             
-            st.download_button(
-                label="Baixar arquivo CSV",
-                data=csv_buffer,
-                file_name="cnpjsconsultados.csv",
-                mime="text/csv",
-            )
-            
-            st.write("---")
-            st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha. O arquivo foi salvo com codificação **`UTF-8-SIG`** para aceitar caracteres especiais no Excel.")
-        else:
-            st.warning("Nenhum CNPJ foi consultado.")
+            cnpjs_para_consultar = [limpar_cnpj(cnpj) for cnpj in df_excel['CNPJ'] if limpar_cnpj(cnpj)]
+            if not cnpjs_para_consultar:
+                st.warning("Nenhum CNPJ válido foi encontrado na coluna 'CNPJ'.")
+                st.stop()
 
-        # --- Apresenta a lista de CNPJs com falha no final ---
-        if cnpjs_com_falha:
-            st.write("---")
-            st.error("Os seguintes CNPJs não puderam ser consultados:")
-            df_falhas = pd.DataFrame(cnpjs_com_falha)
-            st.dataframe(df_falhas)
+            st.info(f"Iniciando a consulta de {len(cnpjs_para_consultar)} CNPJs. Isso pode levar alguns minutos...")
+            
+            barra_de_progresso = st.progress(0)
+            status_texto = st.empty()
+            estimativa_tempo_placeholder = st.empty()
+            
+            resultados, cnpjs_com_falha = consultar_todos_cnpjs(cnpjs_para_consultar, barra_de_progresso, status_texto, estimativa_tempo_placeholder)
+
+            status_texto.empty()
+            estimativa_tempo_placeholder.empty()
+            barra_de_progresso.progress(1.0)
+            
+            if resultados:
+                df_resultados = pd.DataFrame(resultados)
+                st.success("Consulta finalizada com sucesso!")
+                st.dataframe(df_resultados)
+    
+                csv_buffer = BytesIO()
+                df_resultados.to_csv(csv_buffer, index=False, encoding='utf-8-sig', sep=';')
+                csv_buffer.seek(0)
+                
+                st.download_button(
+                    label="Baixar arquivo CSV",
+                    data=csv_buffer,
+                    file_name="cnpjsconsultados.csv",
+                    mime="text/csv",
+                )
+                
+                st.write("---")
+                st.markdown("Clique no botão acima para salvar o arquivo na pasta de sua escolha. O arquivo foi salvo com codificação **`UTF-8-SIG`** para aceitar caracteres especiais no Excel.")
+            else:
+                st.warning("Nenhum CNPJ foi consultado com sucesso.")
+
+            if cnpjs_com_falha:
+                st.write("---")
+                st.error("Os seguintes CNPJs não puderam ser consultados:")
+                df_falhas = pd.DataFrame(cnpjs_com_falha)
+                st.dataframe(df_falhas)
+
+        except Exception as e:
+            st.error(f"Ocorreu um erro inesperado: {e}")
+            logging.error(f"Erro na execução principal: {e}")
