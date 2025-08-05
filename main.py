@@ -31,6 +31,7 @@ def consultar_cnpj(cnpj):
         return None
 
 # Função para extrair os dados para o formato de dicionário
+# Função para extrair os dados para o formato de dicionário
 def extrair_dados_para_df(dados_cnpj):
     dados = {
         'CNPJ': dados_cnpj['taxId'],
@@ -43,7 +44,13 @@ def extrair_dados_para_df(dados_cnpj):
         'Status': dados_cnpj['status']['text'],
         'Data de Status': dados_cnpj['statusDate'],
         'Razão de Status': dados_cnpj.get('reason', {}).get('text', 'Não disponível'),
-        'Endereço': f"{dados_cnpj['address']['street']}, {dados_cnpj['address']['number']}, {dados_cnpj['address']['details']}, {dados_cnpj['address']['district']}, {dados_cnpj['address']['city']}/{dados_cnpj['address']['state']}, {dados_cnpj['address']['zip']}",
+        'Rua': dados_cnpj['address']['street'],
+        'Número': dados_cnpj['address']['number'],
+        'Complemento': dados_cnpj['address'].get('details', ''), # Usa .get() para evitar erro, se não houver detalhes
+        'Bairro': dados_cnpj['address']['district'],
+        'Cidade': dados_cnpj['address']['city'],
+        'Estado': dados_cnpj['address']['state'],
+        'CEP': dados_cnpj['address']['zip'],
         'País': dados_cnpj['address']['country']['name'],
         'Telefone': ', '.join([f"({telefone['area']}) {telefone['number']}" for telefone in dados_cnpj['phones']]),
         'Email': ', '.join([email['address'] for email in dados_cnpj['emails']]),
@@ -54,6 +61,7 @@ def extrair_dados_para_df(dados_cnpj):
         'SIMEI Optante': dados_cnpj['company']['simei']['optant'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
         'SIMEI Desde': dados_cnpj['company']['simei']['since'] if 'simei' in dados_cnpj['company'] else 'Não disponível',
     }
+    
     # Inscrição Estadual
     if 'registrations' in dados_cnpj and len(dados_cnpj['registrations']) > 0:
         inscricao_estadual = dados_cnpj['registrations'][0]
@@ -70,7 +78,6 @@ def extrair_dados_para_df(dados_cnpj):
         dados['Inscrição Estadual Data de Status'] = 'Não encontrada'
 
     return dados
-
 # Função para limpar os CNPJs
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
@@ -153,4 +160,5 @@ if uploaded_file is not None:
             st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
         except Exception as e:
             st.error(f"Erro ao salvar o arquivo CSV: {e}")
+
 
