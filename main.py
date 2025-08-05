@@ -153,3 +153,4 @@ if uploaded_file is not None:
             st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
         except Exception as e:
             st.error(f"Erro ao salvar o arquivo CSV: {e}")
+
