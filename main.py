@@ -159,7 +159,8 @@ if uploaded_file is not None:
             df_resultados.to_csv(caminho_completo, index=False, encoding='utf-8')
             st.success(f"Consulta finalizada e arquivo CSV salvo em: {caminho_completo}")
         except Exception as e:
-            #st.error(f"Erro ao salvar o arquivo CSV: {e}")
+            st.error(f"FINALIZADO! BAIXE O ARQUIVO")
+
 
 
 
