@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 
 # Chave da API
-API_KEY = 'sua-chave-api-aqui'  # Substitua pela sua chave válida
+API_KEY = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'  # Substitua pela sua chave válida
 
 # Função para consultar CNPJ com tratamento de erro 429
 def consultar_cnpj(cnpj):
@@ -164,4 +164,5 @@ if uploaded_file is not None:
             )
         else:
             st.warning("Nenhum dado novo foi consultado.")
+
 
