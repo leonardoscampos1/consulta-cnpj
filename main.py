@@ -109,7 +109,7 @@ def verificar_cnpj_consultado(cnpj_limpo):
 
 # ---- INTERFACE STREAMLIT ----
 
-st.title("🔎 Consulta de CNPJ com Simples Nacional")
+st.title("🔎 Consulta de CNPJ")
 
 uploaded_file = st.file_uploader("📤 Carregue um arquivo XLSX com a coluna 'CNPJ'", type="xlsx")
 
@@ -164,3 +164,4 @@ if uploaded_file is not None:
             )
         else:
             st.warning("Nenhum dado novo foi consultado.")
+
