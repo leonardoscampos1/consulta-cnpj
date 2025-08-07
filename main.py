@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import logging
 import os
+import time
 from io import BytesIO
 
 # Configuração do logging
@@ -12,30 +13,30 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Chave da API
 API_KEY = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
 
-# Função para limpar CNPJ
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
 
-# Função para consultar o CNPJ com Simples Nacional
-def consultar_cnpj(cnpj):
+# Consulta com até 3 tentativas
+def consultar_cnpj_com_retentativas(cnpj, max_tentativas=3):
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
     headers = {'Authorization': API_KEY}
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            logging.info(f"Consulta realizada com sucesso para o CNPJ: {cnpj}")
-            return response.json()
-        else:
-            logging.error(f"Erro ao consultar CNPJ {cnpj}: {response.status_code}")
-            return None
-    except Exception as e:
-        logging.error(f"Erro ao tentar consultar o CNPJ {cnpj}: {e}")
-        return None
 
-# Função para extrair os dados em formato de dicionário
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logging.warning(f"Tentativa {tentativa} falhou para o CNPJ {cnpj}: {response.status_code}")
+                time.sleep(1)  # Espera curta entre tentativas
+        except Exception as e:
+            logging.error(f"Tentativa {tentativa} - Erro ao consultar CNPJ {cnpj}: {e}")
+            time.sleep(1)
+
+    return None  # Todas as tentativas falharam
+
 def extrair_dados_para_df(dados_cnpj):
     dados = {
         'CNPJ': dados_cnpj['taxId'],
@@ -66,7 +67,6 @@ def extrair_dados_para_df(dados_cnpj):
         'SIMEI Desde': dados_cnpj['company'].get('simei', {}).get('since', 'Não disponível'),
     }
 
-    # Inscrição Estadual
     if 'registrations' in dados_cnpj and dados_cnpj['registrations']:
         reg = dados_cnpj['registrations'][0]
         dados.update({
@@ -87,8 +87,8 @@ def extrair_dados_para_df(dados_cnpj):
 
     return dados
 
-# Interface Streamlit
-st.title("🔍 Consulta de CNPJ com Simples Nacional")
+# Streamlit
+st.title("🔍 Consulta de CNPJ com Retentativas e Separação de Resultados")
 
 uploaded_file = st.file_uploader("📂 Carregue o arquivo XLSX com os CNPJs", type="xlsx")
 
@@ -101,38 +101,55 @@ if uploaded_file is not None:
             st.stop()
 
         resultados = []
+        falhas = []
         total = len(df_excel)
         progress = st.progress(0)
 
         for i, row in df_excel.iterrows():
             cnpj = limpar_cnpj(row.get("CNPJ", ""))
             if len(cnpj) != 14:
-                logging.warning(f"CNPJ inválido: {cnpj}")
+                falhas.append({'CNPJ': cnpj, 'Erro': 'Formato inválido'})
+                progress.progress((i + 1) / total)
                 continue
 
-            dados = consultar_cnpj(cnpj)
+            dados = consultar_cnpj_com_retentativas(cnpj)
             if dados:
                 resultados.append(extrair_dados_para_df(dados))
+            else:
+                falhas.append({'CNPJ': cnpj, 'Erro': 'Falha após 3 tentativas'})
 
             progress.progress((i + 1) / total)
 
+        st.success("✅ Consulta finalizada!")
+
+        # Exibir e permitir download dos que deram certo
         if resultados:
             df_resultados = pd.DataFrame(resultados)
-            st.success("✅ Consulta finalizada com sucesso!")
-
-            # Exibir os dados na interface
+            st.subheader("✅ CNPJs consultados com sucesso")
             st.dataframe(df_resultados)
 
-            # Gerar CSV na memória para download
             buffer = BytesIO()
             df_resultados.to_csv(buffer, index=False, encoding='utf-8')
             buffer.seek(0)
-
             st.download_button(
-                label="📥 Baixar resultados em CSV",
+                label="📥 Baixar resultados CSV",
                 data=buffer,
                 file_name="resultado_consulta_cnpj.csv",
                 mime="text/csv"
             )
-        else:
-            st.warning("⚠️ Nenhum dado foi retornado para os CNPJs consultados.")
+
+        # Exibir e permitir download dos que falharam
+        if falhas:
+            df_falhas = pd.DataFrame(falhas)
+            st.subheader("❌ CNPJs que falharam nas 3 tentativas")
+            st.dataframe(df_falhas)
+
+            buffer_erro = BytesIO()
+            df_falhas.to_csv(buffer_erro, index=False, encoding='utf-8')
+            buffer_erro.seek(0)
+            st.download_button(
+                label="📥 Baixar lista de CNPJs com erro",
+                data=buffer_erro,
+                file_name="cnpjs_falha.csv",
+                mime="text/csv"
+            )
