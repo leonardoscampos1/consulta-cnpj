@@ -1,96 +1,126 @@
 import streamlit as st
 import pandas as pd
 import requests
+import os
 import time
 from datetime import datetime
+from io import BytesIO
 
-st.set_page_config(page_title="Consulta de CNPJ em Massa", layout="wide")
+# --- CONFIGURAÇÕES ---
+API_KEY = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'  # Substitua pela sua chave da API CNPJa
+PASTA_SAIDA = 'consultas_cnpjs'
+os.makedirs(PASTA_SAIDA, exist_ok=True)
 
-st.title("🔍 Consulta de CNPJs em Massa - API CNPJ Já")
+# --- FUNÇÃO PARA CONSULTAR API ---
+def consultar_cnpj(cnpj):
+    url = f'https://api.cnpja.com/office/{cnpj}'
+    headers = {'Authorization': f'Bearer {API_KEY}'}
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {'erro': f'Erro {response.status_code}'}
+    except requests.exceptions.RequestException as e:
+        return {'erro': str(e)}
 
-# Campo para colar a chave da API
-api_key = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
+# --- STREAMLIT ---
+st.set_page_config(page_title="Consulta CNPJ", layout="wide")
+st.title("🔎 Consulta de CNPJs com CNPJa API")
 
-# Upload do arquivo Excel
-uploaded_file = st.file_uploader("📤 Envie um arquivo Excel com uma coluna chamada 'CNPJ':", type=["xlsx"])
+arquivo = st.file_uploader("📤 Envie uma planilha com CNPJs", type=['xlsx', 'csv'])
 
-if uploaded_file and api_key:
-    df_excel = pd.read_excel(uploaded_file, dtype=str)
-    
-    if 'CNPJ' not in df_excel.columns:
-        st.error("❌ A planilha deve conter uma coluna chamada 'CNPJ'.")
+if arquivo:
+    if arquivo.name.endswith('.csv'):
+        df = pd.read_csv(arquivo, dtype=str)
     else:
+        df = pd.read_excel(arquivo, dtype=str)
+
+    if 'CNPJ' not in df.columns:
+        st.error("⚠️ A coluna 'CNPJ' não foi encontrada no arquivo.")
+    else:
+        df['CNPJ'] = df['CNPJ'].str.replace(r'\D', '', regex=True)
+        df = df[df['CNPJ'].str.len() == 14].drop_duplicates(subset='CNPJ').reset_index(drop=True)
+
+        st.success(f"✅ {len(df)} CNPJs prontos para consulta.")
+        nome_arquivo_saida = os.path.join(PASTA_SAIDA, f'resultado_consulta_cnpj_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv')
+
         if st.button("🚀 Iniciar Consulta"):
-            total_rows = len(df_excel)
             resultados = []
-            start_time = time.time()
+            start_global = time.time()
 
-            barra_progresso = st.progress(0, text="Iniciando...")
-            texto_status = st.empty()
+            # Para evitar retrabalhos, verifique se já existe consulta anterior
+            cnpjs_consultados = set()
+            if os.path.exists(nome_arquivo_saida):
+                df_existente = pd.read_csv(nome_arquivo_saida, dtype=str)
+                cnpjs_consultados = set(df_existente['CNPJ'].dropna().unique())
+                resultados.extend(df_existente.to_dict(orient='records'))
 
-            for index, row in df_excel.iterrows():
-                cnpj = str(row['CNPJ']).zfill(14)  # Corrige CNPJs com zeros à esquerda
-                url = f"https://api.cnpja.com/office/{cnpj}"
-                headers = {"Authorization": f"Bearer {api_key}"}
+            total = len(df)
+            barra = st.progress(0)
+            status = st.empty()
 
-                try:
-                    response = requests.get(url, headers=headers)
-                    if response.status_code == 200:
-                        data = response.json()
-                        resultados.append({
-                            "CNPJ": cnpj,
-                            "Razão Social": data.get("razao_social"),
-                            "Nome Fantasia": data.get("nome_fantasia"),
-                            "Situação Cadastral": data.get("situacao_cadastral"),
-                            "Porte": data.get("porte"),
-                            "Natureza Jurídica": data.get("natureza_juridica", {}).get("descricao"),
-                            "CNAE Principal": data.get("cnae_principal", {}).get("descricao"),
-                            "Data Abertura": data.get("data_abertura"),
-                            "UF": data.get("estado"),
-                            "Município": data.get("municipio"),
-                            "Telefone": data.get("telefone"),
-                            "Email": data.get("email"),
-                        })
-                    else:
-                        resultados.append({
-                            "CNPJ": cnpj,
-                            "Erro": f"Erro {response.status_code}"
-                        })
-                except Exception as e:
-                    resultados.append({
-                        "CNPJ": cnpj,
-                        "Erro": str(e)
-                    })
+            for i, row in df.iterrows():
+                cnpj = row['CNPJ']
 
-                # Progresso e estimativa
-                progresso = int(((index + 1) / total_rows) * 100)
-                barra_progresso.progress(progresso, text=f"⏳ Processando {index + 1} de {total_rows}...")
+                if cnpj in cnpjs_consultados:
+                    continue
 
-                # Estimativa de tempo restante
-                tempo_passado = time.time() - start_time
-                media = tempo_passado / (index + 1)
-                restante = int(media * (total_rows - (index + 1)))
-                min_rest, sec_rest = divmod(restante, 60)
-                texto_status.caption(f"⏱️ Estimativa: {min_rest}min {sec_rest}s restantes")
+                start_time = time.time()
+                dados = consultar_cnpj(cnpj)
+                tempo_consulta = time.time() - start_time
+
+                registro = {'CNPJ': cnpj}
+
+                if 'erro' in dados:
+                    registro['Status'] = dados['erro']
+                else:
+                    registro['Razão Social'] = dados.get('razao_social')
+                    registro['Nome Fantasia'] = dados.get('nome_fantasia')
+                    registro['Situação Cadastral'] = dados.get('status')
+                    registro['Data Abertura'] = dados.get('abertura')
+                    registro['Porte'] = dados.get('porte')
+                    registro['Natureza Jurídica'] = dados.get('natureza_juridica')
+                    registro['CNAE Principal'] = dados.get('cnae_fiscal_descricao')
+                    registro['Telefone'] = dados.get('ddd_telefone_1')
+                    registro['Email'] = dados.get('email')
+                    registro['UF'] = dados.get('uf')
+                    registro['Município'] = dados.get('municipio')
+                    registro['Bairro'] = dados.get('bairro')
+                    registro['Logradouro'] = dados.get('logradouro')
+                    registro['Número'] = dados.get('numero')
+                    registro['CEP'] = dados.get('cep')
+                    registro['Simples Nacional'] = dados.get('simples', {}).get('simples')
+                    registro['MEI'] = dados.get('simples', {}).get('mei')
+                    registro['IE'] = dados.get('inscricoes_estaduais', [{}])[0].get('inscricao_estadual')
+
+                    registro['Status'] = 'OK'
+
+                resultados.append(registro)
+                cnpjs_consultados.add(cnpj)
+
+                # Salvamento incremental
+                pd.DataFrame(resultados).to_csv(nome_arquivo_saida, index=False)
+
+                # Estimativa
+                total_processados = len(cnpjs_consultados)
+                tempo_total = time.time() - start_global
+                tempo_medio = tempo_total / total_processados if total_processados else 0
+                restante = total - total_processados
+                tempo_restante = int(tempo_medio * restante)
+                mins, secs = divmod(tempo_restante, 60)
+
+                # Atualiza barra e status
+                barra.progress(min(total_processados / total, 1.0))
+                status.info(f"⏱️ {total_processados}/{total} processados | Estimativa restante: {mins}min {secs}s")
+
+                # Pausa para evitar rate limit
+                time.sleep(1)
 
             st.success("✅ Consulta finalizada!")
+            st.dataframe(pd.DataFrame(resultados).tail(10))
 
-            df_resultados = pd.DataFrame(resultados)
-
-            # Mostra resultados
-            st.dataframe(df_resultados)
-
-            # Nome do arquivo
-            agora = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            nome_arquivo = f"resultado_consulta_cnpj_{agora}.csv"
-            csv_bytes = df_resultados.to_csv(index=False).encode("utf-8")
-
-            st.download_button(
-                label="📥 Baixar resultados em CSV",
-                data=csv_bytes,
-                file_name=nome_arquivo,
-                mime="text/csv"
-            )
-else:
-    st.info("👆 Envie um arquivo Excel para começar.")
-
+            # Gera botão de download
+            with open(nome_arquivo_saida, 'rb') as f:
+                bytes_data = f.read()
+            st.download_button("⬇️ Baixar resultado CSV", data=bytes_data, file_name=os.path.basename(nome_arquivo_saida), mime='text/csv')
