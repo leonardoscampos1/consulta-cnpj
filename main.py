@@ -92,4 +92,5 @@ if uploaded_file and api_key:
                 mime="text/csv"
             )
 else:
-    st.info("👆 Envie um arquivo Excel e insira a chave da API para começar.")
+    st.info("👆 Envie um arquivo Excel para começar.")
+
