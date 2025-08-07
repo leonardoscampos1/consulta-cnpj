@@ -18,7 +18,6 @@ API_KEY = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
 
-# Consulta com até 3 tentativas
 def consultar_cnpj_com_retentativas(cnpj, max_tentativas=3):
     url = f'https://api.cnpja.com/office/{cnpj}?simples=true&registrations=BR'
     headers = {'Authorization': API_KEY}
@@ -30,12 +29,12 @@ def consultar_cnpj_com_retentativas(cnpj, max_tentativas=3):
                 return response.json()
             else:
                 logging.warning(f"Tentativa {tentativa} falhou para o CNPJ {cnpj}: {response.status_code}")
-                time.sleep(1)  # Espera curta entre tentativas
+                time.sleep(1)
         except Exception as e:
             logging.error(f"Tentativa {tentativa} - Erro ao consultar CNPJ {cnpj}: {e}")
             time.sleep(1)
 
-    return None  # Todas as tentativas falharam
+    return None
 
 def extrair_dados_para_df(dados_cnpj):
     dados = {
@@ -87,8 +86,13 @@ def extrair_dados_para_df(dados_cnpj):
 
     return dados
 
-# Streamlit
-st.title("🔍 Consulta de CNPJ com Retentativas e Separação de Resultados")
+# Estado da sessão
+if 'resultados' not in st.session_state:
+    st.session_state.resultados = []
+if 'falhas' not in st.session_state:
+    st.session_state.falhas = []
+
+st.title("🔍 Consulta de CNPJ com Reprocessamento de Falhas")
 
 uploaded_file = st.file_uploader("📂 Carregue o arquivo XLSX com os CNPJs", type="xlsx")
 
@@ -100,56 +104,71 @@ if uploaded_file is not None:
             st.error(f"Erro ao ler o arquivo: {e}")
             st.stop()
 
-        resultados = []
-        falhas = []
+        st.session_state.resultados = []
+        st.session_state.falhas = []
+
         total = len(df_excel)
         progress = st.progress(0)
 
         for i, row in df_excel.iterrows():
             cnpj = limpar_cnpj(row.get("CNPJ", ""))
             if len(cnpj) != 14:
-                falhas.append({'CNPJ': cnpj, 'Erro': 'Formato inválido'})
+                st.session_state.falhas.append({'CNPJ': cnpj, 'Erro': 'Formato inválido'})
                 progress.progress((i + 1) / total)
                 continue
 
             dados = consultar_cnpj_com_retentativas(cnpj)
             if dados:
-                resultados.append(extrair_dados_para_df(dados))
+                st.session_state.resultados.append(extrair_dados_para_df(dados))
             else:
-                falhas.append({'CNPJ': cnpj, 'Erro': 'Falha após 3 tentativas'})
+                st.session_state.falhas.append({'CNPJ': cnpj, 'Erro': 'Falha após 3 tentativas'})
 
             progress.progress((i + 1) / total)
 
-        st.success("✅ Consulta finalizada!")
+        st.success("✅ Consulta inicial finalizada!")
 
-        # Exibir e permitir download dos que deram certo
-        if resultados:
-            df_resultados = pd.DataFrame(resultados)
-            st.subheader("✅ CNPJs consultados com sucesso")
-            st.dataframe(df_resultados)
+# Exibir resultados e botões
+if st.session_state.resultados:
+    df_ok = pd.DataFrame(st.session_state.resultados)
+    st.subheader("✅ CNPJs consultados com sucesso")
+    st.dataframe(df_ok)
 
-            buffer = BytesIO()
-            df_resultados.to_csv(buffer, index=False, encoding='utf-8')
-            buffer.seek(0)
-            st.download_button(
-                label="📥 Baixar resultados CSV",
-                data=buffer,
-                file_name="resultado_consulta_cnpj.csv",
-                mime="text/csv"
-            )
+    buffer = BytesIO()
+    df_ok.to_csv(buffer, index=False, encoding='utf-8')
+    buffer.seek(0)
+    st.download_button("📥 Baixar resultados CSV", data=buffer, file_name="resultado_consulta_cnpj.csv", mime="text/csv")
 
-        # Exibir e permitir download dos que falharam
-        if falhas:
-            df_falhas = pd.DataFrame(falhas)
-            st.subheader("❌ CNPJs que falharam nas 3 tentativas")
-            st.dataframe(df_falhas)
+if st.session_state.falhas:
+    df_falha = pd.DataFrame(st.session_state.falhas)
+    st.subheader("❌ CNPJs com erro")
+    st.dataframe(df_falha)
 
-            buffer_erro = BytesIO()
-            df_falhas.to_csv(buffer_erro, index=False, encoding='utf-8')
-            buffer_erro.seek(0)
-            st.download_button(
-                label="📥 Baixar lista de CNPJs com erro",
-                data=buffer_erro,
-                file_name="cnpjs_falha.csv",
-                mime="text/csv"
-            )
+    buffer_erro = BytesIO()
+    df_falha.to_csv(buffer_erro, index=False, encoding='utf-8')
+    buffer_erro.seek(0)
+    st.download_button("📥 Baixar lista de CNPJs com erro", data=buffer_erro, file_name="cnpjs_falha.csv", mime="text/csv")
+
+    if st.button("🔁 Reprocessar CNPJs com erro"):
+        novos_resultados = []
+        erros_atuais = []
+
+        progress = st.progress(0)
+        total = len(st.session_state.falhas)
+
+        for i, item in enumerate(st.session_state.falhas):
+            cnpj = limpar_cnpj(item['CNPJ'])
+            if len(cnpj) != 14:
+                erros_atuais.append({'CNPJ': cnpj, 'Erro': 'Formato inválido'})
+                progress.progress((i + 1) / total)
+                continue
+
+            dados = consultar_cnpj_com_retentativas(cnpj)
+            if dados:
+                novos_resultados.append(extrair_dados_para_df(dados))
+            else:
+                erros_atuais.append({'CNPJ': cnpj, 'Erro': 'Falha após reprocessamento'})
+
+            progress.progress((i + 1) / total)
+
+        st.session_state.resultados.extend(novos_resultados)
+        st.session_state.falhas = erros_atuais
