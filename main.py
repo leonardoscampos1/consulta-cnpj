@@ -13,7 +13,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-API_KEY = 'afdf57ff-b687-497e-b6b9-b88c3e84f2b9-45caadf6-a5a2-458f-859d-82284a78a920'
+API_KEY = '59087779-5d2a-4f2c-8a08-b3ab7bd621ba-25ee79e7-d390-4ebd-b907-0e83bd3e65ab'
 
 def limpar_cnpj(cnpj):
     return ''.join(e for e in str(cnpj) if e.isdigit())
@@ -172,3 +172,4 @@ if st.session_state.falhas:
 
         st.session_state.resultados.extend(novos_resultados)
         st.session_state.falhas = erros_atuais
+
