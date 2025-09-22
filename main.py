@@ -137,7 +137,7 @@ if st.session_state.resultados:
     df_ok.to_csv(buffer, index=False, encoding='utf-8')
     buffer.seek(0)
     st.download_button("📥 Baixar resultados CSV", data=buffer, file_name="resultado_consulta_cnpj.csv", mime="text/csv")
-
+    st.
 if st.session_state.falhas:
     df_falha = pd.DataFrame(st.session_state.falhas)
     st.subheader("❌ CNPJs com erro")
@@ -147,7 +147,7 @@ if st.session_state.falhas:
     df_falha.to_csv(buffer_erro, index=False, encoding='utf-8')
     buffer_erro.seek(0)
     st.download_button("📥 Baixar lista de CNPJs com erro", data=buffer_erro, file_name="cnpjs_falha.csv", mime="text/csv")
-
+    st.markdown("Criado por Leonardo Campos")
     if st.button("🔁 Reprocessar CNPJs com erro"):
         novos_resultados = []
         erros_atuais = []
@@ -172,4 +172,5 @@ if st.session_state.falhas:
 
         st.session_state.resultados.extend(novos_resultados)
         st.session_state.falhas = erros_atuais
+
 
