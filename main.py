@@ -93,6 +93,7 @@ if 'falhas' not in st.session_state:
     st.session_state.falhas = []
 
 st.title("🔍 Consulta de CNPJ com Reprocessamento de Falhas")
+st.markdown("Criado por Leonardo Campos")
 
 uploaded_file = st.file_uploader("📂 Carregue o arquivo XLSX com os CNPJs", type="xlsx")
 
@@ -146,7 +147,7 @@ if st.session_state.falhas:
     df_falha.to_csv(buffer_erro, index=False, encoding='utf-8')
     buffer_erro.seek(0)
     st.download_button("📥 Baixar lista de CNPJs com erro", data=buffer_erro, file_name="cnpjs_falha.csv", mime="text/csv")
-    st.markdown("Criado por Leonardo Campos")
+
     if st.button("🔁 Reprocessar CNPJs com erro"):
         novos_resultados = []
         erros_atuais = []
@@ -171,6 +172,7 @@ if st.session_state.falhas:
 
         st.session_state.resultados.extend(novos_resultados)
         st.session_state.falhas = erros_atuais
+
 
 
 
